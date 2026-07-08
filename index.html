@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CompScan — Pokémon Card Deal Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0b0d0f;
+    --bg-elevated: #14171a;
+    --bg-elevated-hover: #191d21;
+    --border: #23272b;
+    --border-soft: #1b1e21;
+    --text-primary: #e8e6e1;
+    --text-secondary: #b9bcc0;
+    --text-muted: #75797d;
+    --accent: #2dd4bf;
+    --accent-dim: rgba(45, 212, 191, 0.14);
+    --danger: #ef6a63;
+    --danger-dim: rgba(239, 106, 99, 0.12);
+    --holo-1: #67e8f9;
+    --holo-2: #c084fc;
+    --holo-3: #fbbf24;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  *{ box-sizing: border-box; }
+  html{ color-scheme: dark; }
+
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* subtle ambient grain / vignette so pure black doesn't feel flat */
+  body::before{
+    content:"";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(45,212,191,0.06), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 110% 10%, rgba(192,132,252,0.05), transparent 60%);
+    z-index: 0;
+  }
+
+  a { color: inherit; }
+
+  /* ---------- Header ---------- */
+  header{
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(11,13,15,0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .header-inner{
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: clamp(14px, 2vw, 20px) clamp(16px, 3vw, 32px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .brand{
+    display:flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-mark{
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--holo-1), var(--holo-2) 55%, var(--holo-3));
+    position: relative;
+    flex-shrink: 0;
+  }
+  .brand-mark::after{
+    content:"";
+    position:absolute; inset: 3px;
+    border-radius: 5px;
+    background: var(--bg);
+    -webkit-mask: linear-gradient(#000,#000);
+  }
+  .brand-mark::before{
+    content:"";
+    position:absolute;
+    left: 10px; top: 7px; width: 14px; height: 14px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--holo-1), var(--holo-3));
+  }
+  .brand-text h1{
+    font-family: var(--font-display);
+    font-size: 17px;
+    margin:0;
+    letter-spacing: 0.01em;
+  }
+  .brand-text p{
+    margin: 1px 0 0;
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  .stat-ticker{
+    display:flex;
+    gap: clamp(16px, 2.5vw, 34px);
+    font-family: var(--font-mono);
+  }
+  .stat{
+    display:flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .stat .label{
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-family: var(--font-body);
+  }
+  .stat .value{
+    font-size: 18px;
+    font-weight: 500;
+  }
+  .stat .value.positive{ color: var(--accent); }
+
+  .scan-block{
+    display:flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+  }
+  .scan-btn{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--bg);
+    background: linear-gradient(120deg, var(--holo-1), var(--holo-2) 45%, var(--holo-3) 90%);
+    background-size: 220% 220%;
+    background-position: 0% 50%;
+    border: none;
+    border-radius: 7px;
+    padding: 9px 16px;
+    cursor: pointer;
+    transition: background-position .5s ease, transform .15s ease, opacity .2s ease;
+  }
+  .scan-btn:hover{ background-position: 100% 50%; transform: translateY(-1px); }
+  .scan-btn:active{ transform: translateY(0); }
+  .scan-btn:disabled{ cursor: default; opacity: 0.75; transform: none; }
+  .scan-meta{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .spinner{
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(11,13,15,0.25);
+    border-top-color: rgba(11,13,15,0.8);
+    display: none;
+    animation: spin .7s linear infinite;
+  }
+  .scan-btn.loading .spinner{ display: inline-block; }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce){
+    .spinner{ animation: none; }
+    .scan-btn{ transition: none; }
+  }
+
+  /* ---------- Layout ---------- */
+  .layout{
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: clamp(16px, 3vw, 32px);
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    gap: 28px;
+    position: relative;
+    z-index: 1;
+  }
+  @media (max-width: 880px){
+    .layout{ grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Filters ---------- */
+  .filters{
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 18px;
+    height: fit-content;
+    position: sticky;
+    top: 96px;
+  }
+  @media (max-width: 880px){ .filters{ position: static; } }
+
+  .filter-group{ margin-bottom: 22px; }
+  .filter-group:last-child{ margin-bottom: 0; }
+  .filter-group h3{
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+    font-weight: 600;
+  }
+
+  .chip-row{ display:flex; flex-wrap: wrap; gap: 6px; }
+  .chip{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+    user-select: none;
+  }
+  .chip:hover{ border-color: #34383c; color: var(--text-primary); }
+  .chip.active{
+    background: var(--accent-dim);
+    border-color: rgba(45,212,191,0.45);
+    color: var(--accent);
+  }
+
+  .range-row{ display:flex; align-items:center; gap: 8px; }
+  .range-row input[type="number"]{
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    padding: 7px 8px;
+    outline: none;
+    transition: border-color .15s ease;
+  }
+  .range-row input[type="number"]:focus{ border-color: var(--accent); }
+  .range-row span{ color: var(--text-muted); font-size: 12px; }
+
+  .slider-wrap{ padding: 4px 2px 0; }
+  input[type="range"]{
+    width: 100%;
+    accent-color: var(--accent);
+    background: transparent;
+  }
+  .slider-value{
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--accent);
+    margin-top: 4px;
+  }
+
+  .radio-row label{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding: 5px 0;
+    cursor: pointer;
+  }
+  .radio-row input{ accent-color: var(--accent); }
+
+  .search-row{ display:flex; gap: 6px; }
+  .search-row .search-input{ flex: 1; }
+  .search-btn{
+    flex-shrink: 0;
+    width: 34px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .search-btn:hover{ border-color: var(--accent); color: var(--accent); }
+
+  select, .search-input{
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 13px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color .15s ease;
+  }
+  select:focus, .search-input:focus{ border-color: var(--accent); }
+
+  .reset-btn{
+    width: 100%;
+    margin-top: 4px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  .reset-btn:hover{ color: var(--text-primary); border-color: #34383c; }
+
+  /* ---------- Results ---------- */
+  .results-bar{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .results-count{
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .results-count b{ color: var(--text-primary); font-weight: 500; }
+  .sort-control{ display:flex; align-items:center; gap: 8px; }
+  .sort-control label{ font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
+  .sort-control select{ width: auto; min-width: 170px; }
+
+  .deal-list{ display:flex; flex-direction: column; gap: 10px; }
+
+  .deal-row{
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: 46px minmax(0,1fr) auto auto auto;
+    align-items: center;
+    gap: 16px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity .5s ease, transform .5s ease, border-color .2s ease, background .2s ease;
+  }
+  .deal-row.visible{ opacity: 1; transform: translateY(0); }
+  .deal-row:hover{ border-color: #2c3033; background: var(--bg-elevated-hover); }
+
+  @media (max-width: 720px){
+    .deal-row{
+      grid-template-columns: 40px 1fr;
+      grid-template-areas:
+        "swatch title"
+        "swatch meta"
+        "prices prices"
+        "profit profit";
+      row-gap: 8px;
+    }
+    .deal-row .swatch{ grid-area: swatch; }
+    .deal-row .info{ grid-area: title; }
+    .deal-row .price-block{ grid-area: prices; justify-self: start; }
+    .deal-row .profit-block{ grid-area: profit; justify-self: stretch; }
+  }
+
+  .swatch{
+    width: 44px; height: 44px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    display:flex; align-items:center; justify-content:center;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 15px;
+    color: rgba(0,0,0,0.55);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .info{ min-width: 0; }
+  .info .name{
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .info .meta{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+  }
+  .badge{
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .badge.cond-NM{ color: var(--accent); border-color: rgba(45,212,191,0.35); background: var(--accent-dim); }
+  .badge.cond-LP{ color: #93c5fd; border-color: rgba(147,197,253,0.3); background: rgba(147,197,253,0.08); }
+  .badge.cond-MP{ color: #fbbf24; border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.08); }
+  .badge.cond-HP,.badge.cond-DMG{ color: var(--danger); border-color: rgba(239,106,99,0.3); background: var(--danger-dim); }
+  .meta-text{ font-size: 11.5px; color: var(--text-muted); }
+
+  .price-block{
+    display:flex;
+    flex-direction: column;
+    gap: 3px;
+    font-family: var(--font-mono);
+    min-width: 108px;
+  }
+  .price-block .row{ display:flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+  .price-block .row .k{ color: var(--text-muted); }
+  .price-block .row .v{ color: var(--text-secondary); }
+  .price-block .row.tcg .v{ color: var(--text-primary); }
+
+  .profit-block{
+    min-width: 132px;
+    display:flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+  .profit-chip{
+    position: relative;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 500;
+    padding: 7px 12px;
+    border-radius: 7px;
+    overflow: hidden;
+    text-align: right;
+    min-width: 100px;
+  }
+  .profit-chip .pct{ font-size: 11px; opacity: 0.85; display:block; margin-top: 1px; }
+  .profit-chip.pos{
+    color: #0b0d0f;
+    background: linear-gradient(120deg, var(--holo-1), var(--holo-2) 45%, var(--holo-3) 90%);
+    background-size: 220% 220%;
+    background-position: 0% 50%;
+    transition: background-position .6s ease;
+  }
+  .deal-row:hover .profit-chip.pos{ background-position: 100% 50%; }
+  .profit-chip.neg{
+    color: var(--danger);
+    background: var(--danger-dim);
+    border: 1px solid rgba(239,106,99,0.25);
+  }
+  .list-link{
+    font-size: 11px;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--border);
+  }
+  .list-link:hover{ color: var(--accent); border-color: var(--accent); }
+
+  .empty-state{
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-md);
+  }
+  .empty-state strong{ color: var(--text-secondary); display:block; margin-bottom: 6px; font-size: 14px; }
+
+  footer{
+    max-width: 1320px;
+    margin: 10px auto 40px;
+    padding: 0 clamp(16px, 3vw, 32px);
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  footer a{ color: var(--accent); text-decoration: none; }
+  footer a:hover{ text-decoration: underline; }
+
+  @media (prefers-reduced-motion: reduce){
+    .deal-row{ transition: none; opacity: 1; transform: none; }
+    .profit-chip.pos{ transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div class="brand-text">
+        <h1>CompScan</h1>
+        <p>eBay listings, comped against TCGPlayer</p>
+      </div>
+    </div>
+    <div class="stat-ticker">
+      <div class="stat">
+        <span class="label">Deals found</span>
+        <span class="value" id="stat-count">0</span>
+      </div>
+      <div class="stat">
+        <span class="label">Avg margin</span>
+        <span class="value positive" id="stat-margin">0%</span>
+      </div>
+      <div class="stat">
+        <span class="label">Best margin</span>
+        <span class="value positive" id="stat-best">0%</span>
+      </div>
+    </div>
+    <div class="scan-block">
+      <button class="scan-btn" id="scan-btn">
+        <span class="spinner" id="scan-spinner"></span>
+        <span id="scan-btn-label">Scan eBay</span>
+      </button>
+      <span class="scan-meta" id="scan-meta">not yet scanned</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="filters">
+    <div class="filter-group">
+      <h3>Condition</h3>
+      <div class="chip-row" id="condition-chips"></div>
+    </div>
+
+    <div class="filter-group">
+      <h3>Listing type</h3>
+      <div class="radio-row">
+        <label><input type="radio" name="type" value="all" checked> All listings</label>
+        <label><input type="radio" name="type" value="single"> Singles only</label>
+        <label><input type="radio" name="type" value="lot"> Lots only</label>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <h3>Price (eBay, incl. shipping)</h3>
+      <div class="range-row">
+        <input type="number" id="price-min" placeholder="Min" min="0">
+        <span>–</span>
+        <input type="number" id="price-max" placeholder="Max" min="0">
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <h3>Min. profit margin</h3>
+      <div class="slider-wrap">
+        <input type="range" id="margin-slider" min="-20" max="100" value="0" step="5">
+        <div class="slider-value" id="margin-slider-value">≥ 0%</div>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <h3>Search</h3>
+      <div class="search-row">
+        <input type="text" class="search-input" id="search-input" placeholder="Card, set, or keyword…">
+        <button class="search-btn" id="search-btn" aria-label="Search">→</button>
+      </div>
+    </div>
+
+    <button class="reset-btn" id="reset-filters">Reset filters</button>
+  </aside>
+
+  <main>
+    <div class="results-bar">
+      <div class="results-count"><b id="results-count-num">0</b> deals match your filters</div>
+      <div class="sort-control">
+        <label for="sort-select">Sort by</label>
+        <select id="sort-select">
+          <option value="margin-desc">Profit margin (high to low)</option>
+          <option value="profit-desc">Profit $ (high to low)</option>
+          <option value="price-asc">Price (low to high)</option>
+          <option value="price-desc">Price (high to low)</option>
+          <option value="newest">Newest listed</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="deal-list" id="deal-list"></div>
+    <div class="empty-state" id="empty-state" style="display:none;">
+      <strong>No listings match those filters</strong>
+      Try widening the price range or lowering the minimum margin.
+    </div>
+  </main>
+</div>
+
+<footer>
+  This is a working prototype running on sample data, not a live feed. Wiring it up for real would mean pulling active
+  listings from eBay's official Browse API and comping each one against TCGPlayer's pricing API — both need
+  server-side API credentials and scheduled polling, since browsers can't call either directly. Ask if you'd like help
+  building that backend next.
+</footer>
+
+<script>
+(function(){
+  const CONDITIONS = ["NM","LP","MP","HP","DMG"];
+  const SETS = ["Base Set","Jungle","Fossil","Neo Genesis","Team Rocket","Skyridge",
+    "EX Deoxys","Diamond & Pearl","Black & White","XY Evolutions","Sun & Moon",
+    "Sword & Shield","Champion's Path","Evolving Skies","Brilliant Stars",
+    "Crown Zenith","Obsidian Flames","Paldea Evolved","151","Twilight Masquerade"];
+  const CARDS = ["Charizard","Charizard VMAX","Charizard ex","Blastoise","Venusaur",
+    "Pikachu VMAX","Pikachu ex","Umbreon VMAX","Gengar VMAX","Mew ex","Rayquaza VMAX",
+    "Lugia V","Giratina VSTAR","Moonbreon","Mewtwo","Gyarados","Dragonite V",
+    "Alakazam","Eevee VMAX","Sylveon VMAX","Snorlax","Gardevoir ex","Miraidon ex",
+    "Koraidon ex","Iono","Chien-Pao ex","Slowking VSTAR"];
+
+  const TITLE_FRAGMENTS = [
+    "Near-complete edge wear, see photos", "Fresh pull from sealed box", "PSA-ready, sharp corners",
+    "Sleeved since pull, minor edge whitening", "Bulk lot, mixed conditions", "Estate sale find",
+    "Binder-kept, light play", "Vault storage, unopened since 2022", "Tournament played, honest condition",
+    "Collection liquidation piece"
+  ];
+
+  function seededRandom(seed){
+    let s = seed;
+    return function(){
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+  }
+
+  let deals = [];
+  function generateDeals(seed){
+    const rng = seededRandom(seed);
+    function pick(arr){ return arr[Math.floor(rng()*arr.length)]; }
+    function randRange(min,max){ return min + rng()*(max-min); }
+
+    const out = [];
+    for(let i=0;i<34;i++){
+      const isLot = rng() < 0.22;
+      const lotCount = isLot ? Math.floor(randRange(3,12)) : 1;
+      const card = pick(CARDS);
+      const set = pick(SETS);
+      const condition = pick(CONDITIONS);
+      const tcgBase = randRange(8, 340);
+      const tcgMarket = tcgBase * (condition === "NM" ? 1 : condition === "LP" ? 0.85 : condition === "MP" ? 0.68 : condition === "HP" ? 0.5 : 0.35);
+      const tcgTotal = isLot ? tcgMarket * lotCount * randRange(0.8,1.05) : tcgMarket;
+      const dealSkew = randRange(-0.3, 0.55); // negative = overpriced listing, positive = underpriced (good deal)
+      const ebayPrice = Math.max(1, tcgTotal * (1 - dealSkew));
+      const shipping = rng() < 0.4 ? 0 : randRange(3, 12);
+      const totalCost = ebayPrice + shipping;
+      const profit = tcgTotal - totalCost;
+      const marginPct = (profit / totalCost) * 100;
+      const daysAgo = Math.floor(randRange(0, 14));
+
+      out.push({
+        id: i,
+        card, set, condition, isLot, lotCount,
+        title: `${isLot ? lotCount + "x lot — " : ""}${card} (${set}) — ${condition} — ${pick(TITLE_FRAGMENTS)}`,
+        ebayPrice, shipping, totalCost,
+        tcgTotal,
+        profit, marginPct,
+        daysAgo
+      });
+    }
+    return out;
+  }
+
+  // Maps a deal from the real backend (server.js /api/deals) into the same
+  // shape the renderer already expects from generateDeals().
+  function normalizeBackendDeal(d){
+    const daysAgo = null; // eBay's itemCreationDate isn't currently surfaced to the UI
+    return {
+      id: d.id,
+      card: d.matchedCard?.name || "Unknown card",
+      set: d.matchedCard?.set || "",
+      condition: d.condition,
+      isLot: d.isLot,
+      lotCount: d.lotCount,
+      ebayPrice: d.ebayPrice,
+      shipping: d.shipping,
+      totalCost: d.totalCost,
+      tcgTotal: d.grossComp,
+      profit: d.profit,
+      marginPct: d.marginPct,
+      daysAgo,
+      itemWebUrl: d.itemWebUrl,
+      confidence: d.matchedCard?.confidence ?? null
+    };
+  }
+
+  let dataSource = "simulated"; // "live" once a real backend responds
+
+  deals = generateDeals(42);
+
+  // On load, try the real backend (only present if you're running server.js).
+  // If it's not there — e.g. this file opened directly in a browser — we
+  // silently keep the sample data above.
+  fetch("/api/deals")
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(data => {
+      if(data.deals && data.deals.length){
+        deals = data.deals.map(normalizeBackendDeal);
+        dataSource = "live";
+        document.getElementById("scan-meta").textContent =
+          "live · last scanned " + new Date(data.scannedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        render();
+      }
+    })
+    .catch(() => { /* no backend connected — stick with sample data */ });
+
+  // ---------- state ----------
+  const state = {
+    conditions: new Set(),
+    type: "all",
+    priceMin: null,
+    priceMax: null,
+    minMargin: 0,
+    search: "",
+    sort: "margin-desc"
+  };
+
+  // ---------- render filter chips ----------
+  const chipRow = document.getElementById("condition-chips");
+  CONDITIONS.forEach(c => {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.textContent = c;
+    chip.dataset.cond = c;
+    chip.addEventListener("click", () => {
+      if(state.conditions.has(c)){ state.conditions.delete(c); chip.classList.remove("active"); }
+      else { state.conditions.add(c); chip.classList.add("active"); }
+      render();
+    });
+    chipRow.appendChild(chip);
+  });
+
+  document.querySelectorAll('input[name="type"]').forEach(r => {
+    r.addEventListener("change", e => { state.type = e.target.value; render(); });
+  });
+
+  document.getElementById("price-min").addEventListener("input", e => {
+    state.priceMin = e.target.value === "" ? null : parseFloat(e.target.value); render();
+  });
+  document.getElementById("price-max").addEventListener("input", e => {
+    state.priceMax = e.target.value === "" ? null : parseFloat(e.target.value); render();
+  });
+
+  const marginSlider = document.getElementById("margin-slider");
+  const marginSliderValue = document.getElementById("margin-slider-value");
+  marginSlider.addEventListener("input", e => {
+    state.minMargin = parseFloat(e.target.value);
+    marginSliderValue.textContent = (state.minMargin >= 0 ? "≥ " : "≥ ") + state.minMargin + "%";
+    render();
+  });
+
+  document.getElementById("search-input").addEventListener("input", e => {
+    state.search = e.target.value.trim().toLowerCase(); render();
+  });
+
+  document.getElementById("sort-select").addEventListener("change", e => {
+    state.sort = e.target.value; render();
+  });
+
+  document.getElementById("reset-filters").addEventListener("click", () => {
+    state.conditions.clear();
+    state.type = "all";
+    state.priceMin = null;
+    state.priceMax = null;
+    state.minMargin = 0;
+    state.search = "";
+    document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+    document.querySelector('input[name="type"][value="all"]').checked = true;
+    document.getElementById("price-min").value = "";
+    document.getElementById("price-max").value = "";
+    marginSlider.value = 0;
+    marginSliderValue.textContent = "≥ 0%";
+    document.getElementById("search-input").value = "";
+    render();
+  });
+
+  // ---------- swatch coloring ----------
+  const SWATCH_PALETTE = ["#5eead4","#93c5fd","#fca5a5","#fde68a","#c4b5fd","#6ee7b7","#f9a8d4","#a5b4fc"];
+  function swatchFor(name){
+    let hash = 0;
+    for(let i=0;i<name.length;i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    const color = SWATCH_PALETTE[Math.abs(hash) % SWATCH_PALETTE.length];
+    return { color, letter: name.charAt(0) };
+  }
+
+  function money(n){ return "$" + n.toFixed(2); }
+
+  function currentList(){
+    let list = deals.filter(d => {
+      if(state.conditions.size > 0 && !state.conditions.has(d.condition)) return false;
+      if(state.type === "single" && d.isLot) return false;
+      if(state.type === "lot" && !d.isLot) return false;
+      if(state.priceMin !== null && d.totalCost < state.priceMin) return false;
+      if(state.priceMax !== null && d.totalCost > state.priceMax) return false;
+      if(d.marginPct < state.minMargin) return false;
+      if(state.search && !(`${d.card} ${d.set}`.toLowerCase().includes(state.search))) return false;
+      return true;
+    });
+
+    switch(state.sort){
+      case "margin-desc": list.sort((a,b)=>b.marginPct-a.marginPct); break;
+      case "profit-desc": list.sort((a,b)=>b.profit-a.profit); break;
+      case "price-asc": list.sort((a,b)=>a.totalCost-b.totalCost); break;
+      case "price-desc": list.sort((a,b)=>b.totalCost-a.totalCost); break;
+      case "newest": list.sort((a,b)=>a.daysAgo-b.daysAgo); break;
+    }
+    return list;
+  }
+
+  function animateNumber(el, target, suffix, decimals){
+    const start = 0;
+    const duration = 600;
+    const t0 = performance.now();
+    function tick(t){
+      const p = Math.min(1, (t - t0) / duration);
+      const eased = 1 - Math.pow(1-p, 3);
+      const val = start + (target - start) * eased;
+      el.textContent = val.toFixed(decimals) + suffix;
+      if(p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  let observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if(entry.isIntersecting){
+        entry.target.classList.add("visible");
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  function render(){
+    const list = currentList();
+    const container = document.getElementById("deal-list");
+    const emptyState = document.getElementById("empty-state");
+    container.innerHTML = "";
+
+    document.getElementById("results-count-num").textContent = list.length;
+
+    if(list.length === 0){
+      emptyState.style.display = "block";
+    } else {
+      emptyState.style.display = "none";
+    }
+
+    list.forEach((d, idx) => {
+      const row = document.createElement("div");
+      row.className = "deal-row";
+      row.style.transitionDelay = Math.min(idx * 25, 300) + "ms";
+
+      const sw = swatchFor(d.card);
+      const isPos = d.profit >= 0;
+
+      row.innerHTML = `
+        <div class="swatch" style="background:${sw.color}">${sw.letter}</div>
+        <div class="info">
+          <div class="name">${d.card} · ${d.set}</div>
+          <div class="meta">
+            <span class="badge cond-${d.condition}">${d.condition}</span>
+            ${d.isLot ? `<span class="meta-text">${d.lotCount}-card lot</span>` : ""}
+            ${d.daysAgo != null ? `<span class="meta-text">${d.daysAgo === 0 ? "listed today" : `listed ${d.daysAgo}d ago`}</span>` : ""}
+            ${d.confidence != null ? `<span class="meta-text">match confidence ${(d.confidence*100).toFixed(0)}%</span>` : ""}
+          </div>
+        </div>
+        <div class="price-block">
+          <div class="row"><span class="k">eBay</span><span class="v">${money(d.ebayPrice)}${d.shipping > 0 ? " +" + money(d.shipping).slice(1) + " ship" : " free ship"}</span></div>
+          <div class="row tcg"><span class="k">TCGplayer</span><span class="v">${money(d.tcgTotal)}</span></div>
+        </div>
+        <div class="profit-block">
+          <div class="profit-chip ${isPos ? "pos" : "neg"}">
+            ${isPos ? "+" : "−"}${money(Math.abs(d.profit)).slice(1)}
+            <span class="pct">${d.marginPct >= 0 ? "+" : ""}${d.marginPct.toFixed(1)}% margin</span>
+          </div>
+          ${d.itemWebUrl
+            ? `<a class="list-link" href="${d.itemWebUrl}" target="_blank" rel="noopener">View on eBay ↗</a>`
+            : `<a class="list-link" href="#" onclick="return false;">View listing (simulated)</a>`}
+        </div>
+      `;
+      container.appendChild(row);
+      observer.observe(row);
+    });
+
+    // stats
+    if(deals.length){
+      const shown = list.length ? list : deals;
+      const avgMargin = shown.reduce((s,d)=>s+d.marginPct,0) / shown.length;
+      const bestMargin = Math.max(...shown.map(d=>d.marginPct));
+      animateNumber(document.getElementById("stat-count"), list.length, "", 0);
+      animateNumber(document.getElementById("stat-margin"), avgMargin, "%", 1);
+      animateNumber(document.getElementById("stat-best"), bestMargin, "%", 1);
+    }
+  }
+
+  // ---------- scan button ----------
+  const scanBtn = document.getElementById("scan-btn");
+  const scanLabel = document.getElementById("scan-btn-label");
+  const scanMeta = document.getElementById("scan-meta");
+
+  function formatTimeAgo(){
+    const now = new Date();
+    return "scanned " + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  }
+
+  scanBtn.addEventListener("click", () => {
+    scanBtn.disabled = true;
+    scanBtn.classList.add("loading");
+    scanLabel.textContent = "Scanning…";
+
+    fetch("/api/scan", { method: "POST" })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => {
+        deals = data.deals.map(normalizeBackendDeal);
+        dataSource = "live";
+        render();
+        scanMeta.textContent = "live · " + formatTimeAgo() +
+          (data.skipped ? ` · ${data.skipped.noMatch || 0} unmatched, ${data.skipped.graded || 0} graded skipped` : "");
+      })
+      .catch(() => {
+        // No backend connected (or a real scan failed) — fall back to
+        // reshuffling the sample dataset so the button still does something.
+        deals = generateDeals(Date.now());
+        dataSource = "simulated";
+        render();
+        scanMeta.textContent = "simulated · " + formatTimeAgo();
+      })
+      .finally(() => {
+        scanBtn.disabled = false;
+        scanBtn.classList.remove("loading");
+        scanLabel.textContent = "Scan eBay";
+      });
+  });
+
+  // ---------- search button (explicit trigger, mirrors live input) ----------
+  document.getElementById("search-btn").addEventListener("click", () => {
+    state.search = document.getElementById("search-input").value.trim().toLowerCase();
+    render();
+  });
+  document.getElementById("search-input").addEventListener("keydown", e => {
+    if(e.key === "Enter"){
+      state.search = e.target.value.trim().toLowerCase();
+      render();
+    }
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>
