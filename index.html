@@ -795,6 +795,12 @@
 
   function money(n){ return "$" + n.toFixed(2); }
 
+  function ebaySearchUrl(card, set, condition){
+    const conditionWord = { NM: "near mint", LP: "lightly played", MP: "moderately played", HP: "heavily played", DMG: "damaged" }[condition] || "";
+    const q = [card, set, conditionWord].filter(Boolean).join(" ");
+    return "https://www.ebay.com/sch/i.html?_nkw=" + encodeURIComponent(q);
+  }
+
   function currentList(){
     let list = deals.filter(d => {
       if(state.conditions.size > 0 && !state.conditions.has(d.condition)) return false;
@@ -882,9 +888,10 @@
             ${isPos ? "+" : "−"}${money(Math.abs(d.profit)).slice(1)}
             <span class="pct">${d.marginPct >= 0 ? "+" : ""}${d.marginPct.toFixed(1)}% margin</span>
           </div>
-          ${d.itemWebUrl
-            ? `<a class="list-link" href="${d.itemWebUrl}" target="_blank" rel="noopener">View on eBay ↗</a>`
-            : `<a class="list-link" href="#" onclick="return false;">View listing (simulated)</a>`}
+          ${(() => {
+            const url = d.itemWebUrl || ebaySearchUrl(d.card, d.set, d.condition);
+            return `<a class="list-link" href="${url}" target="_blank" rel="noopener">View on eBay ↗</a>`;
+          })()}
         </div>
       `;
       container.appendChild(row);
